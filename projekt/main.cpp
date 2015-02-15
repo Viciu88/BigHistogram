@@ -152,7 +152,7 @@ int main(int argc, char **argv)
 #if(DEBUG_OUTPUT)
     printf("HistogramGPU()...\n");
 #endif
-	histogramGPU(d_Histogram, d_Data, byteCount, binCount, deviceProp);
+	approxHistogramGPU(d_Histogram, d_Data, byteCount, binCount, deviceProp);
 	
 	//transfer resulting data to host
 #if(DEBUG_OUTPUT)

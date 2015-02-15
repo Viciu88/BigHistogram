@@ -37,7 +37,8 @@ __global__ void byteHistogramKernel(uint *d_PartialHistograms, uint *d_Data, uin
 	uint binsPerThread = binCount / blockDim.x;
 	
 	//TODO try to limit bank conflicts
-	__shared__ uchar s_byteHistogram[SHARED_MEMORY_SIZE];
+	extern __shared__ uchar s_byteHistogram[];
+	//__shared__ uchar s_byteHistogram[SHARED_MEMORY_SIZE];
 
 	//clear shared memory histogram bins assigned to this thread
 	#pragma unroll
@@ -80,8 +81,8 @@ __global__ void shortHistogramKernel(uint *d_PartialHistograms, uint *d_Data, ui
 	uint binsPerThread = binCount / blockDim.x;
 	
 	//TODO try to limit bank conflicts
-	//extern __shared__ ushort s_shortHistogram[];
-	__shared__ ushort s_shortHistogram[SHARED_MEMORY_SIZE/2];
+	extern __shared__ ushort s_shortHistogram[];
+	//__shared__ ushort s_shortHistogram[SHARED_MEMORY_SIZE/2];
 
 	//clear shared memory histogram bins assigned to this thread
 	#pragma unroll
@@ -124,7 +125,8 @@ __global__ void intHistogramKernel(uint *d_PartialHistograms, uint *d_Data, uint
 	uint binsPerThread = binCount / blockDim.x;
 	
 	//TODO try to limit bank conflicts
-	__shared__ uint s_Histogram[SHARED_MEMORY_SIZE/4];
+	extern __shared__ uint s_Histogram[];
+	//__shared__ uint s_Histogram[SHARED_MEMORY_SIZE/4];
 
 	//clear shared memory histogram bins assigned to this thread
 	#pragma unroll
@@ -197,7 +199,7 @@ extern "C" void closePartialHistograms(void)
     checkCudaErrors(cudaFree(d_PartialHistograms));
 }
 
-extern "C" void histogramGPU(uint *d_Histogram, void *d_Data, uint byteCount, uint binCount, cudaDeviceProp deviceProp)
+extern "C" void approxHistogramGPU(uint *d_Histogram, void *d_Data, uint byteCount, uint binCount, cudaDeviceProp deviceProp)
 {
 	uint partialHistogramCount = 128;
 	initPartialHistograms(partialHistogramCount, binCount);
@@ -220,7 +222,7 @@ extern "C" void histogramGPU(uint *d_Histogram, void *d_Data, uint byteCount, ui
 	{
 		printf("... using byteHistogramKernel\n");
 		//use kernel with 1 byte per bin
-		byteHistogramKernel<<<partialHistogramCount, 256>>>(d_PartialHistograms, (uint *) d_Data, byteCount / sizeof(uint), binCount);
+		byteHistogramKernel<<<partialHistogramCount, 256, binCount * sizeof(uchar) >>>(d_PartialHistograms, (uint *) d_Data, byteCount / sizeof(uint), binCount);
 		cudaDeviceSynchronize();
 		getLastCudaError("byteHistogramKernel() execution failed\n");
 
@@ -232,7 +234,7 @@ extern "C" void histogramGPU(uint *d_Histogram, void *d_Data, uint byteCount, ui
 	{
 		printf("... using shortHistogramKernel\n");
 		//use kernel with 2 byte per bin
-		shortHistogramKernel<<<partialHistogramCount, 256>>>(d_PartialHistograms, (uint *) d_Data, byteCount / sizeof(uint), binCount);
+		shortHistogramKernel<<<partialHistogramCount, 256, binCount * sizeof(ushort) >>>(d_PartialHistograms, (uint *) d_Data, byteCount / sizeof(uint), binCount);
 		getLastCudaError("shortHistogramKernel() execution failed\n");
 
 		mergePartialHistogramsKernel<<<256, MERGE_THREADBLOCK_SIZE>>>(d_Histogram, d_PartialHistograms, partialHistogramCount, binCount);
@@ -242,7 +244,7 @@ extern "C" void histogramGPU(uint *d_Histogram, void *d_Data, uint byteCount, ui
 	{
 		printf("... using intHistogramKernel\n");
 		//use kernel with 4 byte per bin
-		intHistogramKernel<<<partialHistogramCount, 256>>>(d_PartialHistograms, (uint *) d_Data, byteCount / sizeof(uint), binCount);
+		intHistogramKernel<<<partialHistogramCount, 256, binCount * sizeof(uint) >>>(d_PartialHistograms, (uint *) d_Data, byteCount / sizeof(uint), binCount);
 		getLastCudaError("intHistogramKernel() execution failed\n");
 
 		mergePartialHistogramsKernel<<<256, MERGE_THREADBLOCK_SIZE>>>(d_Histogram, d_PartialHistograms, partialHistogramCount, binCount);
@@ -250,5 +252,4 @@ extern "C" void histogramGPU(uint *d_Histogram, void *d_Data, uint byteCount, ui
 	}
 	
 	closePartialHistograms();
-	
 }

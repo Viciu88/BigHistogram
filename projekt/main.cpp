@@ -87,8 +87,8 @@ void compareHistogram(uint *h_HistogramCPU, uint *h_HistogramGPU, uint binCount)
     for (uint i = 0; i < binCount; i++)
         if (h_HistogramGPU[i] != h_HistogramCPU[i])
         {
-			//if(errorCount++<100)
-			//	printf("error: bin[%d]=%d expected:%d\n", i, h_HistogramGPU[i], h_HistogramCPU[i]);
+			if(errorCount++<100)
+				printf("error: bin[%d]=%d expected:%d\n", i, h_HistogramGPU[i], h_HistogramCPU[i]);
             PassFailFlag = 0;
         }
 #if(DEBUG_OUTPUT)
@@ -152,7 +152,7 @@ int main(int argc, char **argv)
 #if(DEBUG_OUTPUT)
     printf("HistogramGPU()...\n");
 #endif
-	approxHistogramGPU(d_Histogram, d_Data, byteCount, binCount, deviceProp);
+	baseHistogramGPU(d_Histogram, d_Data, byteCount, binCount, deviceProp);
 	
 	//transfer resulting data to host
 #if(DEBUG_OUTPUT)

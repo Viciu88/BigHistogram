@@ -87,7 +87,7 @@ void compareHistogram(uint *h_HistogramCPU, uint *h_HistogramGPU, uint binCount)
     for (uint i = 0; i < binCount; i++)
         if (h_HistogramGPU[i] != h_HistogramCPU[i])
         {
-			if(errorCount++<100)
+			if(errorCount++ < 10)
 				printf("error: bin[%d]=%d expected:%d\n", i, h_HistogramGPU[i], h_HistogramCPU[i]);
             PassFailFlag = 0;
         }

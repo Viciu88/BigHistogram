@@ -152,7 +152,9 @@ int main(int argc, char **argv)
 #if(DEBUG_OUTPUT)
     printf("HistogramGPU()...\n");
 #endif
-	baseHistogramGPU(d_Histogram, d_Data, byteCount, binCount, deviceProp);
+	uint gridSize = 128;
+	uint blockSize = 256;
+	baseHistogramAtomicGPU(d_Histogram, d_Data, byteCount, binCount, gridSize, blockSize, deviceProp);
 	
 	//transfer resulting data to host
 #if(DEBUG_OUTPUT)

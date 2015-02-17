@@ -336,40 +336,32 @@ extern "C" void approxHistogramGPU(uint *d_Histogram, void *d_Data, uint byteCou
 	uint bytesPerBin = deviceProp.sharedMemPerBlock / binCount;
 	
 	if(bytesPerBin == 0)
-	{
-		// Too many bins. Cannot be processed on given hardware
+	{// Too many bins. Cannot be processed on given hardware
 		printf("... execution failed too many bins\n");
 	}
-	else if (bytesPerBin == 1)
+	else 
 	{
-		printf("... using byteHistogramKernel\n");
-		//use kernel with 1 byte per bin
-		byteHistogramKernel<<<partialHistogramCount, 256, binCount * sizeof(uchar) >>>(d_PartialHistograms, (uint *) d_Data, byteCount / sizeof(uint), binCount);
-		cudaDeviceSynchronize();
-		getLastCudaError("byteHistogramKernel() execution failed\n");
-
+		if (bytesPerBin == 1)
+		{//use kernel with 1 byte per bin
+			printf("... using byteHistogramKernel\n");
+			byteHistogramKernel<<<partialHistogramCount, 256, binCount * sizeof(uchar) >>>(d_PartialHistograms, (uint *) d_Data, byteCount / sizeof(uint), binCount);
+			//cudaDeviceSynchronize();
+			getLastCudaError("byteHistogramKernel() execution failed\n");
+		}
+		else if (bytesPerBin == 2 || bytesPerBin == 3)
+		{//use kernel with 2 byte per bin
+			printf("... using shortHistogramKernel\n");
+			shortHistogramKernel<<<partialHistogramCount, 256, binCount * sizeof(ushort) >>>(d_PartialHistograms, (uint *) d_Data, byteCount / sizeof(uint), binCount);
+			getLastCudaError("shortHistogramKernel() execution failed\n");
+		}
+		else if (bytesPerBin > 3 )
+		{//use kernel with 4 byte per bin
+			printf("... using intHistogramKernel\n");
+			intHistogramKernel<<<partialHistogramCount, 256, binCount * sizeof(uint) >>>(d_PartialHistograms, (uint *) d_Data, byteCount / sizeof(uint), binCount);
+			getLastCudaError("intHistogramKernel() execution failed\n");
+		}
 		mergePartialHistogramsKernel<<<256, MERGE_THREADBLOCK_SIZE>>>(d_Histogram, d_PartialHistograms, partialHistogramCount, binCount);
-		cudaDeviceSynchronize();
-		getLastCudaError("mergePartialHistogramsKernel() execution failed\n");
-	}
-	else if (bytesPerBin == 2 || bytesPerBin == 3)
-	{
-		printf("... using shortHistogramKernel\n");
-		//use kernel with 2 byte per bin
-		shortHistogramKernel<<<partialHistogramCount, 256, binCount * sizeof(ushort) >>>(d_PartialHistograms, (uint *) d_Data, byteCount / sizeof(uint), binCount);
-		getLastCudaError("shortHistogramKernel() execution failed\n");
-
-		mergePartialHistogramsKernel<<<256, MERGE_THREADBLOCK_SIZE>>>(d_Histogram, d_PartialHistograms, partialHistogramCount, binCount);
-		getLastCudaError("mergePartialHistogramsKernel() execution failed\n");
-	}
-	else if (bytesPerBin > 3 )
-	{
-		printf("... using intHistogramKernel\n");
-		//use kernel with 4 byte per bin
-		intHistogramKernel<<<partialHistogramCount, 256, binCount * sizeof(uint) >>>(d_PartialHistograms, (uint *) d_Data, byteCount / sizeof(uint), binCount);
-		getLastCudaError("intHistogramKernel() execution failed\n");
-
-		mergePartialHistogramsKernel<<<256, MERGE_THREADBLOCK_SIZE>>>(d_Histogram, d_PartialHistograms, partialHistogramCount, binCount);
+		//cudaDeviceSynchronize();
 		getLastCudaError("mergePartialHistogramsKernel() execution failed\n");
 	}
 	

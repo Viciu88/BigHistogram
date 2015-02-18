@@ -64,7 +64,7 @@ __global__ void byteHistogramKernel(uint *d_PartialHistograms, uint *d_Data, uin
 	uint tid = UMAD(blockIdx.x, blockDim.x, threadIdx.x);
 	uint threadCount = UMUL(blockDim.x, gridDim.x);
 	uint binsPerThread = binCount / blockDim.x;
-	
+
 	//TODO try to limit bank conflicts
 	extern __shared__ uchar s_byteHistogram[];
 	//__shared__ uchar s_byteHistogram[SHARED_MEMORY_SIZE];
@@ -74,7 +74,7 @@ __global__ void byteHistogramKernel(uint *d_PartialHistograms, uint *d_Data, uin
 	for (uint bin = binsPerThread * threadIdx.x; bin < binsPerThread * (threadIdx.x + 1) && bin < binCount; bin++)
 		s_byteHistogram[bin] = 0;
 	__syncthreads();
-	
+
 	for (uint data = tid; data < dataCount; data += threadCount)//approximate
 	//for (uint data = 0; data < dataCount; data++)//with do over
 	{
@@ -95,7 +95,7 @@ __global__ void byteHistogramKernel(uint *d_PartialHistograms, uint *d_Data, uin
 			//disregard data has to be processed by other thread
 		}
 	}
-	
+
 	//copy final histogram bins assigned to this thread to global
 	#pragma unroll
 	for (uint bin = binsPerThread * threadIdx.x; bin < binsPerThread * (threadIdx.x + 1) && bin < binCount; bin++)
@@ -108,7 +108,7 @@ __global__ void shortHistogramKernel(uint *d_PartialHistograms, uint *d_Data, ui
 	uint tid = UMAD(blockIdx.x, blockDim.x, threadIdx.x);
 	uint threadCount = UMUL(blockDim.x, gridDim.x);
 	uint binsPerThread = binCount / blockDim.x;
-	
+
 	//TODO try to limit bank conflicts
 	extern __shared__ ushort s_shortHistogram[];
 	//__shared__ ushort s_shortHistogram[SHARED_MEMORY_SIZE/2];
@@ -118,7 +118,7 @@ __global__ void shortHistogramKernel(uint *d_PartialHistograms, uint *d_Data, ui
 	for (uint bin = binsPerThread * threadIdx.x; bin < binsPerThread * (threadIdx.x + 1) && bin < binCount; bin++)
 		s_shortHistogram[bin] = 0;
 	__syncthreads();
-	
+
 	for (uint data = tid; data < dataCount; data += threadCount)//approximate
 	//for (uint data = 0; data < dataCount; data++)//with do over
 	{
@@ -139,7 +139,7 @@ __global__ void shortHistogramKernel(uint *d_PartialHistograms, uint *d_Data, ui
 			//disregard data has to be processed by other thread
 		}
 	}
-	
+
 	//copy final histogram bins assigned to this thread to global
 	#pragma unroll
 	for (uint bin = binsPerThread * threadIdx.x; bin < binsPerThread * (threadIdx.x + 1) && bin < binCount; bin++)
@@ -152,7 +152,7 @@ __global__ void intHistogramKernel(uint *d_PartialHistograms, uint *d_Data, uint
 	uint tid = UMAD(blockIdx.x, blockDim.x, threadIdx.x);
 	uint threadCount = UMUL(blockDim.x, gridDim.x);
 	uint binsPerThread = binCount / blockDim.x;
-	
+
 	//TODO try to limit bank conflicts
 	extern __shared__ uint s_Histogram[];
 	//__shared__ uint s_Histogram[SHARED_MEMORY_SIZE/4];
@@ -162,7 +162,7 @@ __global__ void intHistogramKernel(uint *d_PartialHistograms, uint *d_Data, uint
 	for (uint bin = binsPerThread * threadIdx.x; bin < binsPerThread * (threadIdx.x + 1) && bin < binCount; bin++)
 		s_Histogram[bin] = 0;
 	__syncthreads();
-	
+
 	for (uint data = tid; data < dataCount; data += threadCount)//approximate
 	//for (uint data = 0; data < dataCount; data++)//with do over
 	{
@@ -177,7 +177,7 @@ __global__ void intHistogramKernel(uint *d_PartialHistograms, uint *d_Data, uint
 			//disregard data has to be processed by other thread
 		}
 	}
-	
+
 	//copy final histogram bins assigned to this thread to global
 	#pragma unroll
 	for (uint bin = binsPerThread * threadIdx.x; bin < binsPerThread * (threadIdx.x + 1) && bin < binCount; bin++)
@@ -193,20 +193,20 @@ __global__ void mergePartialHistogramsKernel(uint *d_Histogram, uint *d_PartialH
 		{
 			sum += d_PartialHistograms[bin + histogramIndex * binCount];
 		}
-	
+
 		__shared__ uint data[MERGE_THREADBLOCK_SIZE];
 		data[threadIdx.x] = sum;
-	
+
 		for (uint stride = MERGE_THREADBLOCK_SIZE / 2; stride > 0; stride >>= 1)
 		{
 			__syncthreads();
-	
+
 			if (threadIdx.x < stride)
 			{
 				data[threadIdx.x] += data[threadIdx.x + stride];
 			}
 		}
-		
+
 		if (threadIdx.x == 0)
 		{
 			d_Histogram[bin] = data[0];
@@ -214,82 +214,80 @@ __global__ void mergePartialHistogramsKernel(uint *d_Histogram, uint *d_PartialH
 	}
 }
 
-__global__ void baseHistogramKernel(uint *d_PartialHistograms, uint *d_Data, uint dataCount, uint binCount)
+__global__ void baseHistogramKernel(uint *d_PartialHistograms, uint *d_Data, uint dataCount, uint binCount, uint warpHistogramCount)
 {
-	//TODO move constants out of kernel
+	//TODO move constants out of kernels
 	uint tid = UMAD(blockIdx.x, blockDim.x, threadIdx.x);
 	uint threadCount = UMUL(blockDim.x, gridDim.x);
-	
+
 	//TODO fix Tagged arithmetic
-	//assumed warpCount * binCount int cells in shared memory
-	uint warpCount = 1;
-	uint sharedMemorySizeUsed = warpCount * binCount;
-	
+	//assumed warpHistogramCount * binCount int cells in shared memory
+	uint sharedMemorySizeUsed = warpHistogramCount * binCount;
+
 	extern __shared__ uint s_Histogram[];
-	
+
 	uint warpSize = 32;
-	uint warpIndex = threadIdx.x / warpSize; //(threadIdx.x >> LOG2_WARP_SIZE); 
-	uint warpHistogramIndex = warpIndex % warpCount;
+	uint warpIndex = threadIdx.x / warpSize; //(threadIdx.x >> LOG2_WARP_SIZE);
+	uint warpHistogramIndex = warpIndex % warpHistogramCount;
 	uint *s_WarpHist = s_Histogram + warpHistogramIndex * binCount;
-	
+
 	//clear shared memory for threadblock //histogram bins assigned to this thread
 	#pragma unroll
 	for (uint bin = threadIdx.x; bin < sharedMemorySizeUsed; bin += blockDim.x)
 		s_Histogram[bin] = 0;
-	
+
 	__syncthreads();
-	
+
 	const uint tag = threadIdx.x << 27;
 	for (uint pos = tid; pos < dataCount; pos += threadCount)
 	{
 		uint data = d_Data[pos];
 		uint bin = binOfValue(data, binCount);
-		
+
 		//atomic add 1 //s_WarpHist[bin]++;
 		addTagged(s_WarpHist, bin, tag); //with tag
 	}
 	__syncthreads();
 
-    for (uint bin = threadIdx.x; bin < binCount; bin += blockDim.x)
-    {
-        uint sum = 0;
-        for (uint i = 0; i < warpCount; i++)
+  for (uint bin = threadIdx.x; bin < binCount; bin += blockDim.x)
+  {
+    uint sum = 0;
+    for (uint i = 0; i < warpHistogramCount; i++)
 			sum += untag(s_Histogram[bin + i * binCount]);
-        d_PartialHistograms[blockIdx.x * binCount + bin] = sum;
-    }
+    d_PartialHistograms[blockIdx.x * binCount + bin] = sum;
+  }
 }
 
-/** assume histogram fits 1 or more times in shared memory specified as warpCount
+/** assume histogram fits 1 or more times in shared memory specified as warpHistogramCount
 */
-__global__ void baseHistogramKernelAtomic (uint *d_PartialHistograms, uint *d_Data, uint dataCount, uint binCount)
+__global__ void baseHistogramKernelAtomic (uint *d_PartialHistograms, uint *d_Data, uint dataCount, uint binCount, uint warpHistogramCount)
 {
 	//TODO move constants out of kernel
 	uint tid = UMAD(blockIdx.x, blockDim.x, threadIdx.x);
 	uint threadCount = UMUL(blockDim.x, gridDim.x);
-	
-	//assumed warpCount * binCount int cells in shared memory
-	uint warpCount = 1;
-	uint sharedMemorySizeUsed = warpCount * binCount;
-	
+
+	//assumed warpHistogramCount * binCount int cells in shared memory
+	uint sharedMemorySizeUsed = warpHistogramCount * binCount;
+
 	extern __shared__ uint s_Histogram[];
-	
+
 	uint warpSize = 32;
-	uint warpIndex = threadIdx.x / warpSize; //(threadIdx.x >> LOG2_WARP_SIZE); 
-	uint warpHistogramIndex = warpIndex % warpCount;
+	uint warpIndex = threadIdx.x / warpSize; //(threadIdx.x >> LOG2_WARP_SIZE);
+	uint warpHistogramIndex = warpIndex % warpHistogramCount;
 	uint *s_WarpHist = s_Histogram + warpHistogramIndex * binCount;
-	
+
 	//clear shared memory for threadblock //histogram bins assigned to this thread
 	#pragma unroll
 	for (uint bin = threadIdx.x; bin < sharedMemorySizeUsed; bin += blockDim.x)
 		s_Histogram[bin] = 0;
-	
+
 	__syncthreads();
-	
+
 	for (uint pos = tid; pos < dataCount; pos += threadCount)
 	{
 		uint data = d_Data[pos];
 		uint bin = binOfValue(data, binCount);
-		
+
 		//atomic add 1 //s_WarpHist[bin]++;
 		addAtomic(s_WarpHist, bin); //without tag
 	}
@@ -298,7 +296,7 @@ __global__ void baseHistogramKernelAtomic (uint *d_PartialHistograms, uint *d_Da
     for (uint bin = threadIdx.x; bin < binCount; bin += blockDim.x)
     {
         uint sum = 0;
-        for (uint i = 0; i < warpCount; i++)
+        for (uint i = 0; i < warpHistogramCount; i++)
         {
 			sum += s_Histogram[bin + i * binCount];//without tag
         }
@@ -315,16 +313,16 @@ __global__ void partHistogramKernelAtomic (uint *d_PartialHistograms, uint *d_Da
 	//TODO move constants out of kernel
 	uint tid = UMAD(blockIdx.x, blockDim.x, threadIdx.x);
 	uint threadCount = UMUL(blockDim.x, gridDim.x);
-	
+
 	extern __shared__ uint s_Histogram[];
-	
+
 	//clear shared memory for threadblock //histogram bins assigned to this thread
 	#pragma unroll
 	for (uint bin = threadIdx.x; bin < binCount; bin += blockDim.x)
 		s_Histogram[bin] = 0;
-	
+
 	__syncthreads();
-	
+
 	for (uint pos = tid; pos < dataCount; pos += threadCount)
 	{
 		uint bin = binOfValue(d_Data[pos], totalBinCount) - minBinIndex;
@@ -350,26 +348,25 @@ extern "C" void closePartialHistograms(void)
 
 extern "C" void clearHistogramsAndPartialHistograms(uint *d_Histogram, uint partialHistogramCount, uint binCount)
 {
-	clearHistogram<<<partialHistogramCount, 512>>>(d_Histogram, binCount);
+	clearHistogram<<<partialHistogramCount, 256>>>(d_Histogram, binCount);
 	getLastCudaError("clearHistogram() execution failed\n");
-	clearHistogram<<<partialHistogramCount, 512>>>(d_PartialHistograms, partialHistogramCount * binCount);
+	clearHistogram<<<partialHistogramCount, 256>>>(d_PartialHistograms, partialHistogramCount * binCount);
 	getLastCudaError("clearHistogram() execution failed\n");
 }
 
 extern "C" void approxHistogramGPU(uint *d_Histogram, void *d_Data, uint byteCount, uint binCount, uint gridSize, uint blockSize, cudaDeviceProp deviceProp)
 {
-	uint partialHistogramCount = gridSize;
-	initPartialHistograms(partialHistogramCount, binCount);
-	
-	clearHistogramsAndPartialHistograms(d_Histogram, partialHistogramCount, binCount);
-	
+	initPartialHistograms(gridSize, binCount);//TODO move out
+
+	clearHistogramsAndPartialHistograms(d_Histogram, gridSize, binCount);
+
 	//dynamically get bytes per bin depending on hardware
 	uint bytesPerBin = deviceProp.sharedMemPerBlock / binCount;
 	if(bytesPerBin == 0)
 	{// Too many bins. Cannot be processed on given hardware
 		printf("... execution failed too many bins\n");
 	}
-	else 
+	else
 	{
 		if (bytesPerBin == 1)
 		{//use kernel with 1 byte per bin
@@ -390,94 +387,103 @@ extern "C" void approxHistogramGPU(uint *d_Histogram, void *d_Data, uint byteCou
 			intHistogramKernel<<<gridSize, blockSize, binCount * sizeof(uint) >>>(d_PartialHistograms, (uint *) d_Data, byteCount / sizeof(uint), binCount);
 			getLastCudaError("intHistogramKernel() execution failed\n");
 		}
-		mergePartialHistogramsKernel<<<256, MERGE_THREADBLOCK_SIZE>>>(d_Histogram, d_PartialHistograms, partialHistogramCount, binCount);
+		mergePartialHistogramsKernel<<<256, MERGE_THREADBLOCK_SIZE>>>(d_Histogram, d_PartialHistograms, gridSize, binCount);
 		//cudaDeviceSynchronize();
 		getLastCudaError("mergePartialHistogramsKernel() execution failed\n");
 	}
-	
-	closePartialHistograms();
+
+	closePartialHistograms();//TODO move out
+}
+
+//maximum warpHistogramCount is limited by number of threads in block (blockDim.x / warpSize) and shared memory (sharedMemPerBlock / histogramSize)
+inline uint getMaxWarpHistogramCount(uint binCount, uint blockSize, cudaDeviceProp deviceProp)
+{
+	uint warpsInBlock = blockSize / deviceProp.warpSize;
+	if(blockSize > (warpsInBlock * deviceProp.warpSize))
+		warpsInBlock++;
+	uint warpsInSharedMemory = deviceProp.sharedMemPerBlock / (binCount * sizeof(uint));
+	if(warpsInBlock <= warpsInSharedMemory)
+		return warpsInBlock;
+	return warpsInSharedMemory;
 }
 
 extern "C" void baseHistogramGPU(uint *d_Histogram, void *d_Data, uint byteCount, uint binCount, uint gridSize, uint blockSize, cudaDeviceProp deviceProp)
 {
-	uint partialHistogramCount = gridSize;
-	initPartialHistograms(partialHistogramCount, binCount);
-	clearHistogramsAndPartialHistograms(d_Histogram, partialHistogramCount, binCount);
-	
+	initPartialHistograms(gridSize, binCount);//TODO move out
+
+	clearHistogramsAndPartialHistograms(d_Histogram, gridSize, binCount);
+
 	if(deviceProp.sharedMemPerBlock < binCount * sizeof(uint))
 	{
 		// Too many bins. Cannot be processed on given hardware
 		printf("... execution failed too many bins\n");
 		return;
 	}
-	//kernels
-	printf("... using baseHistogramKernel\n");
-	//use kernel with 4 byte per bin
-	//TODO add more warphistograms if possible if(shared memory /(binCount*4) > 1)
-	baseHistogramKernel<<<gridSize, blockSize, binCount * sizeof(uint) >>>(d_PartialHistograms, (uint *) d_Data, byteCount / sizeof(uint), binCount);
+	uint warpHistogramCount = getMaxWarpHistogramCount(binCount, blockSize, deviceProp);
+	printf("... using baseHistogramKernel (%d warp histograms) \n", warpHistogramCount);
+	baseHistogramKernel<<<gridSize, blockSize, binCount * sizeof(uint) * warpHistogramCount >>>(d_PartialHistograms, (uint *) d_Data, byteCount / sizeof(uint), binCount, warpHistogramCount);
 	getLastCudaError("baseHistogramKernel() execution failed\n");
 
-	mergePartialHistogramsKernel<<<256, MERGE_THREADBLOCK_SIZE>>>(d_Histogram, d_PartialHistograms, partialHistogramCount, binCount);
+	mergePartialHistogramsKernel<<<256, MERGE_THREADBLOCK_SIZE>>>(d_Histogram, d_PartialHistograms, gridSize, binCount);
 	getLastCudaError("mergePartialHistogramsKernel() execution failed\n");
-	
-	closePartialHistograms();
+
+	closePartialHistograms();//TODO move out
 }
 
 extern "C" void baseHistogramAtomicGPU(uint *d_Histogram, void *d_Data, uint byteCount, uint binCount, uint gridSize, uint blockSize, cudaDeviceProp deviceProp)
 {
-	uint partialHistogramCount = gridSize;
-	initPartialHistograms(partialHistogramCount, binCount);
-	clearHistogramsAndPartialHistograms(d_Histogram, partialHistogramCount, binCount);
-	
+	initPartialHistograms(gridSize, binCount);//TODO move out
+
+	clearHistogramsAndPartialHistograms(d_Histogram, gridSize, binCount);
+
 	if(deviceProp.sharedMemPerBlock < binCount * sizeof(uint))
 	{
 		// Too many bins. Cannot be processed on given hardware
 		printf("... execution failed too many bins\n");
 		return;
 	}
-	printf("... using baseHistogramKernelAtomic\n");
-	//TODO add more warp histograms if possible if(shared memory /(binCount*4) >1)
-	baseHistogramKernelAtomic<<<gridSize, blockSize, binCount * sizeof(uint) >>>(d_PartialHistograms, (uint *) d_Data, byteCount / sizeof(uint), binCount);
+
+	uint warpHistogramCount = getMaxWarpHistogramCount(binCount, blockSize, deviceProp);
+	printf("... using baseHistogramKernelAtomic (%d warp histograms) \n", warpHistogramCount);
+	baseHistogramKernelAtomic<<<gridSize, blockSize, binCount * sizeof(uint) * warpHistogramCount >>>(d_PartialHistograms, (uint *) d_Data, byteCount / sizeof(uint), binCount, warpHistogramCount);
 	getLastCudaError("baseHistogramKernelAtomic() execution failed\n");
 
-	mergePartialHistogramsKernel<<<256, MERGE_THREADBLOCK_SIZE>>>(d_Histogram, d_PartialHistograms, partialHistogramCount, binCount);
+	mergePartialHistogramsKernel<<<256, MERGE_THREADBLOCK_SIZE>>>(d_Histogram, d_PartialHistograms, gridSize, binCount);
 	getLastCudaError("mergePartialHistogramsKernel() execution failed\n");
-	
-	closePartialHistograms();
+
+	closePartialHistograms();//TODO move out
 }
 
 extern "C" void partHistogramAtomicGPU(uint *d_Histogram, void *d_Data, uint byteCount, uint binCount, uint gridSize, uint blockSize, cudaDeviceProp deviceProp)
 {
-	uint partialHistogramCount = gridSize;
-	initPartialHistograms(partialHistogramCount, binCount);
-	clearHistogramsAndPartialHistograms(d_Histogram, partialHistogramCount, binCount);
-	
+	initPartialHistograms(gridSize, binCount);//TODO move out
+
+	clearHistogramsAndPartialHistograms(d_Histogram, gridSize, binCount);
+
 	printf("... using partHistogramKernelAtomic\n");
-	//TODO add more warp histograms if possible if(shared memory /(binCount*4) >1)
 	uint binsPerPart = deviceProp.sharedMemPerBlock / sizeof(uint);
-	//uint binsPerPart = 10000;
-	
 	for(uint minBinIndex = 0; minBinIndex < binCount; minBinIndex += binsPerPart)
 	{
-		binsPerPart = (minBinIndex + binsPerPart <= binCount) ? binsPerPart : (binCount - minBinIndex);
-		printf("... using partHistogramKernelAtomic part %d : %d\n", minBinIndex, minBinIndex + binsPerPart);
+		if(minBinIndex + binsPerPart > binCount)
+			binsPerPart = binCount - minBinIndex;
+		printf("... using partHistogramKernelAtomic part %d - %d\n", minBinIndex, minBinIndex + binsPerPart - 1);
 		partHistogramKernelAtomic<<<gridSize, blockSize, binsPerPart * sizeof(uint) >>>(d_PartialHistograms, (uint *) d_Data, byteCount / sizeof(uint), binCount, minBinIndex, binsPerPart);
-	}	
-	getLastCudaError("baseHistogramKernelAtomic() execution failed\n");
+		getLastCudaError("partHistogramKernelAtomic() execution failed\n");
+	}
 
-	mergePartialHistogramsKernel<<<256, MERGE_THREADBLOCK_SIZE>>>(d_Histogram, d_PartialHistograms, partialHistogramCount, binCount);
+	mergePartialHistogramsKernel<<<256, MERGE_THREADBLOCK_SIZE>>>(d_Histogram, d_PartialHistograms, gridSize, binCount);
 	getLastCudaError("mergePartialHistogramsKernel() execution failed\n");
-	
-	closePartialHistograms();
+
+	closePartialHistograms();//TODO move out
 }
 
-inline uint checkParams(uint gridSize, uint blockSize, uint binCount, cudaDeviceProp deviceProp, uint bytesPerBin, uint warpCount)
+inline uint checkParams(uint gridSize, uint blockSize, uint binCount, cudaDeviceProp deviceProp, uint bytesPerBin, uint warpHistogramCount)
 {
 	if(blockSize > deviceProp.maxThreadsPerBlock)
 	{//too many threads in block
 		return 0;
 	}
-	if(binCount * bytesPerBin * warpCount > deviceProp.sharedMemPerBlock)
+	if(binCount * bytesPerBin * warpHistogramCount > deviceProp.sharedMemPerBlock)
 	{//cannot fit histogram in shared memory
 		return 0;
 	}

@@ -27,7 +27,7 @@ void histogramCPU(uint *h_Histogram, void *h_Data, uint byteCount, uint binCount
         h_Histogram[i] = 0;
 
     assert(sizeof(uint) == 4 && (byteCount % 4) == 0);
-	
+
     for (uint i = 0; i < (byteCount / 4); i++)
     {
         uint data = ((uint *)h_Data)[i];
@@ -52,7 +52,7 @@ cudaDeviceProp checkCudaDevice(uint argc, const char ** argv)
     deviceProp.minor = 0;
 	//Use command-line specified CUDA device, otherwise use device with highest Gflops/s
     int dev = findCudaDevice(argc, (const char **)argv);
-	
+
     checkCudaErrors(cudaGetDeviceProperties(&deviceProp, dev));
 #if(DEBUG_OUTPUT)
     printf("CUDA device [%s] has %d Multi-Processors, Compute %d.%d\n",deviceProp.name, deviceProp.multiProcessorCount, deviceProp.major, deviceProp.minor);
@@ -115,7 +115,7 @@ int main(int argc, char **argv)
 #if(DEBUG_OUTPUT)
     printf("Histogram with %d bins\n", binCount);
 #endif
-	
+
 	//allocate host data
 #if(DEBUG_OUTPUT)
     printf("Initializing data...\n");
@@ -132,7 +132,7 @@ int main(int argc, char **argv)
 #endif
     checkCudaErrors(cudaMalloc((void **)&d_Data, byteCount));
     checkCudaErrors(cudaMalloc((void **)&d_Histogram, binCount * sizeof(uint)));
-	
+
 	//initialize host data
 #if(DEBUG_OUTPUT)
     printf("Loading data...\n");
@@ -140,13 +140,13 @@ int main(int argc, char **argv)
 	generateRandomData(h_Data, byteCount);//TODO other methods
 
 	histogramCPU(h_HistogramCPU, h_Data, byteCount, binCount);
-	
+
 	//initialize device data
 #if(DEBUG_OUTPUT)
     printf("Copying data to device...\n");
 #endif
 	checkCudaErrors(cudaMemcpy(d_Data, h_Data, byteCount, cudaMemcpyHostToDevice));
-	
+
 	//determine execution configuration
 	//execute kernel
 #if(DEBUG_OUTPUT)
@@ -154,17 +154,17 @@ int main(int argc, char **argv)
 #endif
 	uint gridSize = 128;
 	uint blockSize = 256;
-	partHistogramAtomicGPU(d_Histogram, d_Data, byteCount, binCount, gridSize, blockSize, deviceProp);
-	
+	baseHistogramGPU(d_Histogram, d_Data, byteCount, binCount, gridSize, blockSize, deviceProp);
+
 	//transfer resulting data to host
 #if(DEBUG_OUTPUT)
     printf("Copying histogram to host...\n");
 #endif
 	checkCudaErrors(cudaMemcpy(h_HistogramGPU, d_Histogram, binCount * sizeof(uint), cudaMemcpyDeviceToHost));
-	
+
 	//check validity of results
 	compareHistogram(h_HistogramCPU, h_HistogramGPU, binCount);
-	
+
 	//memory deallocation and cleanup
 #if(DEBUG_OUTPUT)
     printf("Shutting down...\n");

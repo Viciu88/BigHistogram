@@ -346,11 +346,14 @@ extern "C" void closePartialHistograms(void)
     checkCudaErrors(cudaFree(d_PartialHistograms));
 }
 
-extern "C" void clearHistogramsAndPartialHistograms(uint *d_Histogram, uint partialHistogramCount, uint binCount)
+extern "C" void clearHistogramsAndPartialHistograms(uint *d_Histogram, uint gridSize, uint blockSize, uint binCount)
 {
-	clearHistogram<<<partialHistogramCount, 256>>>(d_Histogram, binCount);
+	clearHistogram<<<gridSize, blockSize>>>(d_PartialHistograms, gridSize * binCount);
 	getLastCudaError("clearHistogram() execution failed\n");
-	clearHistogram<<<partialHistogramCount, 256>>>(d_PartialHistograms, partialHistogramCount * binCount);
+
+	if((gridSize * blockSize) > binCount)
+		gridSize = 16;
+	clearHistogram<<<gridSize, blockSize>>>(d_Histogram, binCount);
 	getLastCudaError("clearHistogram() execution failed\n");
 }
 
@@ -358,7 +361,7 @@ extern "C" void approxHistogramGPU(uint *d_Histogram, void *d_Data, uint byteCou
 {
 	initPartialHistograms(gridSize, binCount);//TODO move out
 
-	clearHistogramsAndPartialHistograms(d_Histogram, gridSize, binCount);
+	clearHistogramsAndPartialHistograms(d_Histogram, gridSize, blockSize, binCount);
 
 	//dynamically get bytes per bin depending on hardware
 	uint bytesPerBin = deviceProp.sharedMemPerBlock / binCount;
@@ -411,7 +414,7 @@ extern "C" void baseHistogramGPU(uint *d_Histogram, void *d_Data, uint byteCount
 {
 	initPartialHistograms(gridSize, binCount);//TODO move out
 
-	clearHistogramsAndPartialHistograms(d_Histogram, gridSize, binCount);
+	clearHistogramsAndPartialHistograms(d_Histogram, gridSize, blockSize, binCount);
 
 	if(deviceProp.sharedMemPerBlock < binCount * sizeof(uint))
 	{
@@ -434,7 +437,7 @@ extern "C" void baseHistogramAtomicGPU(uint *d_Histogram, void *d_Data, uint byt
 {
 	initPartialHistograms(gridSize, binCount);//TODO move out
 
-	clearHistogramsAndPartialHistograms(d_Histogram, gridSize, binCount);
+	clearHistogramsAndPartialHistograms(d_Histogram, gridSize, blockSize, binCount);
 
 	if(deviceProp.sharedMemPerBlock < binCount * sizeof(uint))
 	{
@@ -458,7 +461,7 @@ extern "C" void partHistogramAtomicGPU(uint *d_Histogram, void *d_Data, uint byt
 {
 	initPartialHistograms(gridSize, binCount);//TODO move out
 
-	clearHistogramsAndPartialHistograms(d_Histogram, gridSize, binCount);
+	clearHistogramsAndPartialHistograms(d_Histogram, gridSize, blockSize, binCount);
 
 	printf("... using partHistogramKernelAtomic\n");
 	uint binsPerPart = deviceProp.sharedMemPerBlock / sizeof(uint);

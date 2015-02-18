@@ -154,7 +154,7 @@ int main(int argc, char **argv)
 #endif
 	uint gridSize = 128;
 	uint blockSize = 256;
-	baseHistogramGPU(d_Histogram, d_Data, byteCount, binCount, gridSize, blockSize, deviceProp);
+	approxHistogramGPU(d_Histogram, d_Data, byteCount, binCount, gridSize, blockSize, deviceProp);
 
 	//transfer resulting data to host
 #if(DEBUG_OUTPUT)
